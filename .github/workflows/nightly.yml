@@ -11,4 +11,4 @@ jobs:
     steps:
       - name: Call topics job for demo user
         run: |
-          curl -X POST "https://<project>.up.railway.app/jobs/daily-topics/run-for/123456789"
+          curl -X POST "https://web-production-b9ae.up.railway.app/jobs/daily-topics/run-for/743050845"
