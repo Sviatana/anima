@@ -1,0 +1,14 @@
+name: Nightly topics
+
+on:
+  schedule:
+    - cron: "15 2 * * *"  # запуск каждый день в 02:15 UTC
+  workflow_dispatch:      # позволяет запускать вручную из вкладки Actions
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call topics job for demo user
+        run: |
+          curl -X POST "https://<project>.up.railway.app/jobs/daily-topics/run-for/123456789"
