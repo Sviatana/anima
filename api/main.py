@@ -98,17 +98,30 @@ def detect_emotion(t: str) -> str:
     if re.search(r"не знаю|путаюсь|сомнева", tl): return "uncertain"
     return "neutral"
 
-# возвращаем на рельсы, если уходим в сторону
+# мягкий возврат на рельсы
 def off_topic_guard(user_text:str, focus_topic:Optional[str])->Optional[str]:
     if not focus_topic:
         return None
     tl = (user_text or "").lower()
-    # если нет слов из темы и в тексте мало конкретики — мягко возвращаем
     if not any(w in tl for w in focus_topic.lower().split()[:2]):
         return ("Кажется, мы чуть ушли в сторону 🌱\n"
                 f"Давай завершим разговор о «{focus_topic}». "
                 "Если захочешь сменить тему — скажи «сменим тему на ...».")
     return None
+
+# простые интенты
+def detect_intent(t:str)->Tuple[str,Optional[str]]:
+    tl = (t or "").lower().strip()
+    if re.search(r"(что ты умеешь|что ты можешь|как ты помогаешь|функц)", tl):
+        return ("capabilities", None)
+    if re.search(r"(как тебя зовут|кто ты)", tl):
+        return ("about", None)
+    m = re.match(r"(сменим|сменить)\s+тему\s+на\s+(.+)", tl)
+    if m:
+        return ("change_topic", m.group(2).strip())
+    if tl in {"сменим тему","сменить тему"}:
+        return ("change_topic_ask", None)
+    return ("none", None)
 
 # ---------------------------------------------------------------------
 # MI phases (упрощённый FSM)
@@ -131,15 +144,12 @@ KNO = [
     ("tf", "Как ты чаще принимаешь решения: через логику и аргументы 🧠 или через чувства и внутренние ценности 💛?"),
     ("jp", "Когда тебе спокойнее: когда всё чётко спланировано 📋 или когда есть свобода и импровизация 🎈?")
 ]
-
-AXIS_LABEL = {
-    "ei": ("E","I"), "sn": ("S","N"), "tf": ("T","F"), "jp": ("J","P")
-}
+AXIS_LABEL = {"ei": ("E","I"), "sn": ("S","N"), "tf": ("T","F"), "jp": ("J","P")}
 
 def kno_start(uid:int):
     app_state_set(uid, {"kno_idx":0, "kno_answers":{}, "kno_done":False})
 
-def _pick_choice(axis:str, text:str)->int:
+def _pick_choice(axis:str, text:str)->Optional[int]:
     t = (text or "").strip().lower()
     if t in {"1","первый","первое","первая"}: return 1
     if t in {"2","второй","второе","вторая"}: return 2
@@ -155,17 +165,20 @@ def _pick_choice(axis:str, text:str)->int:
     if axis=="jp":
         if any(w in t for w in ["план","распис","контрол","структ"]): return 1
         if any(w in t for w in ["свобод","импров","спонтан"]):         return 2
-    return 1  # по умолчанию
+    return None  # не распознали
 
-def kno_step(uid:int, text:str)->Optional[str]:
+def kno_step(uid:int, text:str)->Tuple[Optional[str], Optional[str]]:
+    """Возвращает (следующий_вопрос_или_None, ошибка_если_нужно_переспросить)"""
     st = app_state_get(uid)
     idx = st.get("kno_idx",0)
     answers = st.get("kno_answers",{})
-    axis, question = KNO[idx]
+    axis, _ = KNO[idx]
     choice = _pick_choice(axis, text)
+    if choice is None:
+        return (KNO[idx][1], "Не совсем поняла ответ. Можно цифрой 1 или 2, либо коротко словами про первый/второй вариант?")
+
     answers[axis] = choice
     idx += 1
-
     if idx >= len(KNO):
         # агрегируем и пишем профиль
         axes = {"E":0,"I":0,"S":0,"N":0,"T":0,"F":0,"J":0,"P":0}
@@ -184,12 +197,12 @@ def kno_step(uid:int, text:str)->Optional[str]:
              ON CONFLICT (user_id)
              DO UPDATE SET ei=EXCLUDED.ei,sn=EXCLUDED.sn,tf=EXCLUDED.tf,jp=EXCLUDED.jp,
                            confidence=EXCLUDED.confidence, updated_at=NOW()""",
-          (uid, ei, sn, tf, jp, 0.45, None, json.dumps([]), None))
+          (uid, ei, sn, tf, jp, 0.5, None, json.dumps([]), None))
         app_state_set(uid, {"kno_done":True, "kno_idx":None, "kno_answers":answers})
-        return None
+        return (None, None)
     else:
         app_state_set(uid, {"kno_idx":idx, "kno_answers":answers})
-        return KNO[idx][1]
+        return (KNO[idx][1], None)
 
 # ---------------------------------------------------------------------
 # Personalization
@@ -260,7 +273,7 @@ async def webhook(update: TelegramUpdate, request: Request):
     u       = msg.get("from",{})
     ensure_user(uid, u.get("username"), u.get("first_name"), u.get("last_name"))
 
-    # Crisis / sensitive topics
+    # Safety
     if crisis_detect(text):
         reply = ("Я рядом и слышу твою боль. Если нужна срочная поддержка — обратись к близким "
                  "или в службу помощи. Что сейчас было бы самым поддерживающим?")
@@ -275,10 +288,8 @@ async def webhook(update: TelegramUpdate, request: Request):
              VALUES(%s,'assistant',%s,'engage','neutral',false)""",(uid,reply))
         return {"ok":True}
 
-    # ----- Onboarding states ------------------------------------------------
+    # /start — приветствие
     st = app_state_get(uid)
-
-    # /start — тёплое приветствие и прозрачность
     if text.lower() in ("/start","start","старт","начать"):
         app_state_set(uid, {"stage":"ask_name", "focus_topic":None, "kno_done":False,
                             "kno_idx":None, "kno_answers":{}})
@@ -292,7 +303,7 @@ async def webhook(update: TelegramUpdate, request: Request):
         q("INSERT INTO dialog_events(user_id,role,text,mi_phase) VALUES(%s,'assistant',%s,'engage')",(uid,greet))
         return {"ok":True}
 
-    # спрашиваем имя
+    # ———— стадии онбординга
     if st.get("stage") == "ask_name":
         name = text.split()[0][:24] if text else "друг"
         facts_patch(uid, {"profile": {"name": name}})
@@ -300,14 +311,12 @@ async def webhook(update: TelegramUpdate, request: Request):
         await tg_send(chat_id, "Как ты сейчас? Выбери слово, которое ближе: спокойно, напряжённо, растерянно — или опиши по-своему.")
         return {"ok":True}
 
-    # спрашиваем состояние
     if st.get("stage") == "ask_feel":
         facts_patch(uid, {"profile": {"feel": text}})
         app_state_set(uid, {"stage":"ask_goal"})
         await tg_send(chat_id, "Чего бы тебе хотелось от наших разговоров? Больше ясности, поддержки, энергии на действия — что откликается?")
         return {"ok":True}
 
-    # спрашиваем ожидание и предлагаём мини-тест
     if st.get("stage") == "ask_goal":
         facts_patch(uid, {"profile": {"goal": text}})
         app_state_set(uid, {"stage":"kno_intro"})
@@ -320,17 +329,20 @@ async def webhook(update: TelegramUpdate, request: Request):
         await tg_send(chat_id, f"{intro}\n\n{first_q}\n\nОтветь 1 или 2, можно словами.")
         return {"ok":True}
 
-    # сам мини-тест
+    # мини-тест
     if st.get("kno_done") is False and st.get("kno_idx") is not None:
-        nxt = kno_step(uid, text)
+        nxt, err = kno_step(uid, text)
+        if err:
+            await tg_send(chat_id, err)
+            await tg_send(chat_id, nxt + "\n\nОтветь 1 или 2, можно словами.")
+            return {"ok":True}
         if nxt is None:
-            # тест закончен
             prof = q("SELECT ei,sn,tf,jp FROM psycho_profile WHERE user_id=%s",(uid,))[0]
             mbti = to_mbti(prof["ei"],prof["sn"],prof["tf"],prof["jp"])
             facts_patch(uid, {"profile": {"mbti": mbti}})
             app_state_set(uid, {"stage":"focus_ask","kno_done":True})
             reply = (f"Спасибо, я лучше понимаю, как с тобой говорить 💛\n"
-                     f"Пока это черновой профиль: *{mbti}*. Он будет уточняться по ходу диалога.\n\n"
+                     f"Пока это черновой профиль: {mbti}. Он будет уточняться по ходу диалога.\n\n"
                      "Расскажи коротко — с чем хочешь сегодня поработать или о чём поговорить?")
             await tg_send(chat_id, reply)
             return {"ok":True}
@@ -338,16 +350,33 @@ async def webhook(update: TelegramUpdate, request: Request):
             await tg_send(chat_id, f"{nxt}\n\nОтветь 1 или 2, можно словами.")
             return {"ok":True}
 
-    # фиксируем сегодняшнюю тему/фокус
     if st.get("stage") == "focus_ask":
         app_state_set(uid, {"stage":"dialog", "focus_topic": text})
         await tg_send(chat_id, "Спасибо, записала 💛 Если захочешь изменить фокус — просто напиши.")
-        # провокация первого шага
         await tg_send(chat_id, "Готова продолжать. Какой маленький шаг по этой теме был бы для тебя посильным сегодня?")
         return {"ok":True}
 
-    # ----- Основной диалог --------------------------------------------------
-    # рельсы: удерживаем на теме
+    # ———— интенты (работают в любом месте после онбординга)
+    intent, arg = detect_intent(text)
+    if intent == "capabilities":
+        reply = ("Я помогаю навести ясность, снизить тревогу, структурировать мысли и выбрать посильные шаги. "
+                 "Могу задавать вопросы, отражать чувства, предлагать микро-планы и мягко возвращать к фокусу. "
+                 "Если хочешь — напиши «сменим тему на …» и зададим новый фокус.")
+        await tg_send(chat_id, reply)
+        return {"ok":True}
+    if intent == "about":
+        await tg_send(chat_id, "Я Анима 🌿 — твой психологический ассистент. Говорю по-человечески и бережно, без оценок и спама.")
+        return {"ok":True}
+    if intent == "change_topic_ask":
+        await tg_send(chat_id, "На какую тему сменим фокус?")
+        app_state_set(uid, {"stage":"focus_ask"})
+        return {"ok":True}
+    if intent == "change_topic" and arg:
+        app_state_set(uid, {"focus_topic": arg, "stage":"dialog"})
+        await tg_send(chat_id, f"Готово. Новый фокус: «{arg}». Чем начнём?")
+        return {"ok":True}
+
+    # ———— основной диалог
     rail_hint = off_topic_guard(text, st.get("focus_topic"))
     if rail_hint:
         await tg_send(chat_id, rail_hint)
@@ -363,16 +392,14 @@ async def webhook(update: TelegramUpdate, request: Request):
         draft = "Слышу тебя. Что здесь для тебя главное?"
 
     await tg_send(chat_id, draft)
-    # логируем
     q("""INSERT INTO dialog_events(user_id,role,text,mi_phase,emotion,relevance)
          VALUES(%s,'user',%s,%s,%s,false)""",(uid, text, phase, emo))
     q("""INSERT INTO dialog_events(user_id,role,text,mi_phase,emotion,relevance)
          VALUES(%s,'assistant',%s,%s,%s,false)""",(uid, draft, phase, emo))
-
     return {"ok":True}
 
 # ---------------------------------------------------------------------
-# Reports (как раньше)
+# Reports
 # ---------------------------------------------------------------------
 def auth_reports(x_token: str) -> bool:
     return (not REPORTS_TOKEN) or (x_token == REPORTS_TOKEN)
@@ -401,7 +428,7 @@ async def reports_summary(x_token: str = Header(default="")):
         (SELECT json_agg(json_build_object('phase', mi_phase, 'count', cnt)) FROM ph) AS phases
     """)
     conf = q("SELECT * FROM v_confidence_hist")
-    ret = q("SELECT * FROM v_retention_7d")
+    ret  = q("SELECT * FROM v_retention_7d")
     return {
         "kpi": kpi[0] if kpi else {},
         "confidence_hist": conf or [],
@@ -426,7 +453,7 @@ async def reports_user(uid: int, x_token: str = Header(default="")):
       ORDER BY day DESC LIMIT 14
     """,(uid,))
     return {
-        "profile": prof[0] if prof else {},
-        "last_events": last_events or [],
-        "quality_14d": quality or []
+        "profile":      prof[0] if prof else {},
+        "last_events":  last_events or [],
+        "quality_14d":  quality or []
     }
