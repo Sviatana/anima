@@ -243,28 +243,35 @@ async def webhook(update: TelegramUpdate, request: Request):
         q("INSERT INTO dialog_events(user_id,role,text,mi_phase,emotion,relevance) VALUES(%s,'assistant',%s,'engage','neutral',false)",(uid,reply))
         return {"ok":True}
 
-    # KNO onboarding
+        # KNO onboarding
     st = app_state_get(uid)
-    if text.lower() in ("/start", "старт", "начать") or not st.get("kno_done"):
-        if st.get("kno_idx") is None and not st.get("kno_done"):
+    if text.lower() in ("/start","старт","начать") or not st.get("kno_done"):
+        # если индекса ещё нет — это самое первое касание: стартуем и задаём 1-й вопрос
+        if st.get("kno_idx") is None:
             kno_start(uid)
-        if st.get("kno_answers") is None or (st.get("kno_idx",0) == 0 and not st.get("kno_answers")):
             q1 = KNO[0][1]
-            await tg_send(chat_id, f"Привет, я Анима. Давай познакомимся. {q1}")
-            q("INSERT INTO dialog_events(user_id,role,text,mi_phase,emotion,relevance) VALUES(%s,'assistant',%s,'engage','neutral',false)",(uid,q1))
-            return {"ok":True}
+            greet = "Привет, я Анима. Давай познакомимся. "
+            await tg_send(chat_id, f"{greet}{q1}\n\nМожешь отвечать цифрой 1 или 2, или словами.")
+            q("INSERT INTO dialog_events(user_id,role,text,mi_phase) VALUES(%s,'assistant',%s,'engage')",(uid,q1))
+            return {"ok": True}
+
+        # иначе мы уже в анкете — обрабатываем текущий ответ и задаём следующий вопрос
         nxt = kno_step(uid, text)
         if nxt is None:
             prof = q("SELECT ei,sn,tf,jp,confidence FROM psycho_profile WHERE user_id=%s",(uid,))[0]
-            conf = int(prof["confidence"]*100)
-            reply = f"Это моё первое впечатление. Уверенность {conf}% и будет расти по мере общения. Готова перейти к свободному диалогу."
+            conf = int((prof["confidence"] or 0)*100)
+            reply = (
+                "Это моё первое впечатление. "
+                f"Уверенность {conf}% и будет расти по мере общения. "
+                "Готова перейти к свободному диалогу."
+            )
             await tg_send(chat_id, reply)
-            q("INSERT INTO dialog_events(user_id,role,text,mi_phase,emotion,relevance) VALUES(%s,'assistant',%s,'engage','neutral',false)",(uid,reply))
-            return {"ok":True}
+            q("INSERT INTO dialog_events(user_id,role,text,mi_phase) VALUES(%s,'assistant',%s,'engage')",(uid,reply))
+            return {"ok": True}
         else:
-            await tg_send(chat_id, nxt)
-            q("INSERT INTO dialog_events(user_id,role,text,mi_phase,emotion,relevance) VALUES(%s,'assistant',%s,'engage','neutral',false)",(uid,nxt))
-            return {"ok":True}
+            await tg_send(chat_id, nxt + "\n\nОтветь 1 или 2, можно словами.")
+            q("INSERT INTO dialog_events(user_id,role,text,mi_phase) VALUES(%s,'assistant',%s,'engage')",(uid,nxt))
+            return {"ok": True}
 
     # Emotion and relevance
     emo = detect_emotion(text)
