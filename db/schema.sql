@@ -1,10 +1,10 @@
 CREATE TABLE IF NOT EXISTS user_profile (
   user_id BIGINT PRIMARY KEY,
-  username TEXT,
+  username   TEXT,
   first_name TEXT,
-  last_name TEXT,
-  locale TEXT,
-  facts JSONB DEFAULT '{}'::jsonb,
+  last_name  TEXT,
+  locale     TEXT,
+  facts      JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -16,9 +16,9 @@ CREATE TABLE IF NOT EXISTS psycho_profile (
   tf FLOAT DEFAULT 0.5,
   jp FLOAT DEFAULT 0.5,
   confidence FLOAT DEFAULT 0.3,
-  mbti_type TEXT,
-  anchors JSONB DEFAULT '[]'::jsonb,
-  state TEXT,
+  mbti_type  TEXT,
+  anchors    JSONB DEFAULT '[]'::jsonb,
+  state      TEXT,
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -27,20 +27,19 @@ CREATE TABLE IF NOT EXISTS dialog_events (
   user_id BIGINT REFERENCES user_profile(user_id) ON DELETE CASCADE,
   role TEXT CHECK (role IN ('user','assistant','system')),
   text TEXT,
-  emotion TEXT,
+  emotion  TEXT,
   mi_phase TEXT,
-  topic TEXT,
+  topic    TEXT,
   relevance BOOLEAN,
   axes JSONB,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+/* ВАЖНО: версия таблицы, которую ждёт код: PK по user_id */
 CREATE TABLE IF NOT EXISTS daily_topics (
-  id BIGSERIAL PRIMARY KEY,
-  user_id BIGINT REFERENCES user_profile(user_id) ON DELETE CASCADE,
-  date DATE DEFAULT CURRENT_DATE,
-  topics JSONB NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW()
+  user_id BIGINT PRIMARY KEY REFERENCES user_profile(user_id) ON DELETE CASCADE,
+  topics  JSONB NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS reports (
@@ -51,15 +50,14 @@ CREATE TABLE IF NOT EXISTS reports (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
--- ===== ИНДЕКСЫ ДЛЯ СКОРОСТИ =====
+/* Индексы */
 CREATE INDEX IF NOT EXISTS idx_dialog_user_created ON dialog_events(user_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_dialog_role ON dialog_events(role);
-CREATE INDEX IF NOT EXISTS idx_dialog_phase ON dialog_events(mi_phase);
+CREATE INDEX IF NOT EXISTS idx_dialog_role   ON dialog_events(role);
+CREATE INDEX IF NOT EXISTS idx_dialog_phase  ON dialog_events(mi_phase);
 CREATE INDEX IF NOT EXISTS idx_dialog_emotion ON dialog_events(emotion);
 CREATE INDEX IF NOT EXISTS idx_psycho_conf ON psycho_profile(confidence DESC);
-CREATE INDEX IF NOT EXISTS idx_daily_topics_user_date ON daily_topics(user_id, date);
 
--- ===== ВЬЮХИ ДЛЯ МЕТРИК =====
+/* Вьюхи */
 DROP VIEW IF EXISTS v_message_lengths;
 CREATE VIEW v_message_lengths AS
 SELECT id, user_id, role, length(coalesce(text,'')) AS len, created_at
@@ -75,13 +73,9 @@ SELECT
   e.mi_phase,
   e.emotion,
   e.created_at,
-  -- открытый вопрос
-  (position('?' in coalesce(e.text,'')) > 0) AS has_question,
-  -- целевая длина
-  (length(coalesce(e.text,'')) BETWEEN 90 AND 350) AS in_target_len,
-  -- эмпатическая лексика минимальная эвристика
-  (e.text ~* '(слышу|вижу|понимаю|рядом|важно)') AS has_empathy,
-  -- запретные темы
+  (position('?' in coalesce(e.text,'')) > 0)                       AS has_question,
+  (length(coalesce(e.text,'')) BETWEEN 90 AND 350)                 AS in_target_len,
+  (e.text ~* '(слышу|вижу|понимаю|рядом|важно)')                   AS has_empathy,
   (e.text ~* '(политик|религ|насили|медицинск|вакцин|диагноз|лекарств|суицид)') AS has_banned
 FROM dialog_events e
 WHERE e.role = 'assistant';
@@ -97,7 +91,6 @@ SELECT
 FROM v_quality_flags
 GROUP BY user_id, date_trunc('day', created_at);
 
--- распределение фаз
 DROP VIEW IF EXISTS v_phase_dist;
 CREATE VIEW v_phase_dist AS
 SELECT date_trunc('day', created_at) AS day, mi_phase, count(*) AS cnt
@@ -105,7 +98,6 @@ FROM dialog_events
 WHERE role='assistant'
 GROUP BY 1,2;
 
--- средняя длина ответов ассистента по дням
 DROP VIEW IF EXISTS v_len_daily;
 CREATE VIEW v_len_daily AS
 SELECT date_trunc('day', created_at) AS day, avg(len) AS avg_len
@@ -113,17 +105,15 @@ FROM v_message_lengths
 WHERE role='assistant'
 GROUP BY 1;
 
--- уверенность MBTI по пользователям
 DROP VIEW IF EXISTS v_confidence_hist;
 CREATE VIEW v_confidence_hist AS
 SELECT
-  width_bucket(confidence, 0, 1, 10) AS bucket,
+  width_bucket(COALESCE(confidence,0), 0, 1, 10) AS bucket,
   count(*) AS users
 FROM psycho_profile
 GROUP BY 1
 ORDER BY 1;
 
--- ретеншн простая метрика возвращаемости за 7 дней
 DROP VIEW IF EXISTS v_retention_7d;
 CREATE VIEW v_retention_7d AS
 WITH first_seen AS (
