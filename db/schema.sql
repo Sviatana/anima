@@ -16,9 +16,9 @@ CREATE TABLE IF NOT EXISTS psycho_profile (
   tf FLOAT DEFAULT 0.5,
   jp FLOAT DEFAULT 0.5,
   confidence FLOAT DEFAULT 0.3,
-  mbti_type  TEXT,
-  anchors    JSONB DEFAULT '[]'::jsonb,
-  state      TEXT,
+  mbti_type TEXT,
+  anchors JSONB DEFAULT '[]'::jsonb,
+  state TEXT,
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -27,18 +27,18 @@ CREATE TABLE IF NOT EXISTS dialog_events (
   user_id BIGINT REFERENCES user_profile(user_id) ON DELETE CASCADE,
   role TEXT CHECK (role IN ('user','assistant','system')),
   text TEXT,
-  emotion  TEXT,
+  emotion TEXT,
   mi_phase TEXT,
-  topic    TEXT,
+  topic TEXT,
   relevance BOOLEAN,
   axes JSONB,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
-/* ВАЖНО: версия таблицы, которую ждёт код: PK по user_id */
+-- Единственная корректная версия daily_topics (PK по user_id)
 CREATE TABLE IF NOT EXISTS daily_topics (
   user_id BIGINT PRIMARY KEY REFERENCES user_profile(user_id) ON DELETE CASCADE,
-  topics  JSONB NOT NULL,
+  topics JSONB NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -50,14 +50,14 @@ CREATE TABLE IF NOT EXISTS reports (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
-/* Индексы */
+-- ===== Индексы =====
 CREATE INDEX IF NOT EXISTS idx_dialog_user_created ON dialog_events(user_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_dialog_role   ON dialog_events(role);
-CREATE INDEX IF NOT EXISTS idx_dialog_phase  ON dialog_events(mi_phase);
+CREATE INDEX IF NOT EXISTS idx_dialog_role  ON dialog_events(role);
+CREATE INDEX IF NOT EXISTS idx_dialog_phase ON dialog_events(mi_phase);
 CREATE INDEX IF NOT EXISTS idx_dialog_emotion ON dialog_events(emotion);
 CREATE INDEX IF NOT EXISTS idx_psycho_conf ON psycho_profile(confidence DESC);
 
-/* Вьюхи */
+-- ===== Вьюхи =====
 DROP VIEW IF EXISTS v_message_lengths;
 CREATE VIEW v_message_lengths AS
 SELECT id, user_id, role, length(coalesce(text,'')) AS len, created_at
@@ -73,9 +73,9 @@ SELECT
   e.mi_phase,
   e.emotion,
   e.created_at,
-  (position('?' in coalesce(e.text,'')) > 0)                       AS has_question,
-  (length(coalesce(e.text,'')) BETWEEN 90 AND 350)                 AS in_target_len,
-  (e.text ~* '(слышу|вижу|понимаю|рядом|важно)')                   AS has_empathy,
+  (position('?' in coalesce(e.text,'')) > 0) AS has_question,
+  (length(coalesce(e.text,'')) BETWEEN 90 AND 350) AS in_target_len,
+  (e.text ~* '(слышу|вижу|понимаю|рядом|важно)') AS has_empathy,
   (e.text ~* '(политик|религ|насили|медицинск|вакцин|диагноз|лекарств|суицид)') AS has_banned
 FROM dialog_events e
 WHERE e.role = 'assistant';
@@ -108,7 +108,7 @@ GROUP BY 1;
 DROP VIEW IF EXISTS v_confidence_hist;
 CREATE VIEW v_confidence_hist AS
 SELECT
-  width_bucket(COALESCE(confidence,0), 0, 1, 10) AS bucket,
+  width_bucket(confidence, 0, 1, 10) AS bucket,
   count(*) AS users
 FROM psycho_profile
 GROUP BY 1
