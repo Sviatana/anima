@@ -56,3 +56,4 @@ async def webhook(update: TelegramUpdate, request: Request):
     reply = "Я с тобой и слышу твои чувства. Что сейчас для тебя самое важное"
     await tg_send(chat_id, reply)
     return {"ok": True}
+    
