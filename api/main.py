@@ -108,9 +108,45 @@ def kno_step(uid:int, text:str)->Optional[str]:
     st = app_state_get(uid)
     idx = st.get("kno_idx",0)
     answers = st.get("kno_answers",{})
-    a2 = bool(re.search(r"(втор|вторая|второе|или втор)", text.lower()))
+
+    # Нормализуем ответ: цифры 1/2 или ключевые слова
+    t = text.strip().lower()
+
+    def pick_by_keywords(question_key:str, t:str)->int:
+        # 1 — первый вариант в вопросе, 2 — второй
+        if t in {"1","первый","первое","первая"}:
+            return 1
+        if t in {"2","второй","второе","вторая"}:
+            return 2
+
+        # мягкие эвристики по каждому вопросу
+        if question_key.startswith("ei_"):
+            if "наедин" in t or "один" in t or "тишин" in t:
+                return 2
+            if "люд" in t or "общат" in t или "встреч" in t:
+                return 1
+        if question_key.startswith("sn_"):
+            if "факт" in t or "конкрет" in t or "шаг" in t:
+                return 1
+            if "смысл" in t or "иде" in t or "образ" in t:
+                return 2
+        if question_key.startswith("tf_"):
+            if "логик" in t or "рацион" in t or "аргумент" in t:
+                return 1
+            if "чувств" in t or "эмоци" in t or "ценност" in t:
+                return 2
+        if question_key.startswith("jp_"):
+            if "план" in t or "распис" in t или "контрол" in t:
+                return 1
+            if "свобод" in t или "импров" in t или "спонтан" in t:
+                return 2
+        # если совсем не похоже — по умолчанию первый вариант
+        return 1
+
     key,_ = KNO[idx]
-    answers[key] = 2 if a2 else 1
+    choice = pick_by_keywords(key, t)
+    answers[key] = choice
+
     idx += 1
     if idx >= len(KNO):
         # compute axes
@@ -118,21 +154,19 @@ def kno_step(uid:int, text:str)->Optional[str]:
         for k,v in answers.items():
             a,b = KNO_MAP[k]
             axes[a if v==1 else b]+=1
-        def norm(a,b): s=a+b; return (a/(s or 1)), (b/(s or 1))
-        E,I = norm(axes["E"],axes["I"])
-        S,N = norm(axes["S"],axes["N"])
-        T,F = norm(axes["T"],axes["F"])
-        J,P = norm(axes["J"],axes["P"])
+        def norm(a,b): s=a+b; return ((a/(s or 1)), (b/(s or 1)))
+        E,I = norm(axes["E"],axes["I"]); S,N = norm(axes["S"],axes["N"])
+        T,F = norm(axes["T"],axes["F"]); J,P = norm(axes["J"],axes["P"])
         q("""INSERT INTO psycho_profile(user_id,ei,sn,tf,jp,confidence,mbti_type,anchors,state)
              VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)
-             ON CONFLICT (user_id) DO UPDATE SET ei=EXCLUDED.ei,sn=EXCLUDED.sn,
-             tf=EXCLUDED.tf,jp=EXCLUDED.jp,confidence=EXCLUDED.confidence,updated_at=NOW()""",
+             ON CONFLICT (user_id) DO UPDATE SET ei=EXCLUDED.ei,sn=EXCLUDED.sn,tf=EXCLUDED.tf,jp=EXCLUDED.jp,confidence=EXCLUDED.confidence,updated_at=NOW()""",
           (uid,E,N,T,J,0.4,None,json.dumps([]),None))
         app_state_set(uid, {"kno_done":True,"kno_idx":None,"kno_answers":answers})
         return None
     else:
         app_state_set(uid, {"kno_idx":idx,"kno_answers":answers})
         return KNO[idx][1]
+
 
 # ---------- Relevance & MBTI update ----------
 def classify_relevance(t:str)->Tuple[bool,Dict[str,float],List[Dict[str,Any]]]:
