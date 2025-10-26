@@ -1,63 +1,69 @@
+-- db/schema.sql
+-- Постгрес 13+
+
+-- === USERS ===
 CREATE TABLE IF NOT EXISTS user_profile (
-  user_id BIGINT PRIMARY KEY,
+  user_id    BIGINT PRIMARY KEY,
   username   TEXT,
   first_name TEXT,
   last_name  TEXT,
   locale     TEXT,
   facts      JSONB DEFAULT '{}'::jsonb,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- === PSYCHO PROFILE ===
 CREATE TABLE IF NOT EXISTS psycho_profile (
-  user_id BIGINT PRIMARY KEY REFERENCES user_profile(user_id) ON DELETE CASCADE,
-  ei FLOAT DEFAULT 0.5,
-  sn FLOAT DEFAULT 0.5,
-  tf FLOAT DEFAULT 0.5,
-  jp FLOAT DEFAULT 0.5,
-  confidence FLOAT DEFAULT 0.3,
-  mbti_type TEXT,
-  anchors JSONB DEFAULT '[]'::jsonb,
-  state TEXT,
-  updated_at TIMESTAMP DEFAULT NOW()
+  user_id    BIGINT PRIMARY KEY REFERENCES user_profile(user_id) ON DELETE CASCADE,
+  ei         FLOAT  DEFAULT 0.5,  -- E/I   (храним значение 0..1 для "первой" буквы)
+  sn         FLOAT  DEFAULT 0.5,  -- N/S
+  tf         FLOAT  DEFAULT 0.5,  -- T/F
+  jp         FLOAT  DEFAULT 0.5,  -- J/P
+  confidence FLOAT  DEFAULT 0.30,
+  mbti_type  TEXT,
+  anchors    JSONB  DEFAULT '[]'::jsonb,
+  state      TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- === DIALOG EVENTS ===
 CREATE TABLE IF NOT EXISTS dialog_events (
-  id BIGSERIAL PRIMARY KEY,
-  user_id BIGINT REFERENCES user_profile(user_id) ON DELETE CASCADE,
-  role TEXT CHECK (role IN ('user','assistant','system')),
-  text TEXT,
-  emotion TEXT,
-  mi_phase TEXT,
-  topic TEXT,
-  relevance BOOLEAN,
-  axes JSONB,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
--- Единственная корректная версия daily_topics (PK по user_id)
-CREATE TABLE IF NOT EXISTS daily_topics (
-  user_id BIGINT PRIMARY KEY REFERENCES user_profile(user_id) ON DELETE CASCADE,
-  topics JSONB NOT NULL,
+  id         BIGSERIAL PRIMARY KEY,
+  user_id    BIGINT REFERENCES user_profile(user_id) ON DELETE CASCADE,
+  role       TEXT CHECK (role IN ('user','assistant','system')),
+  text       TEXT,
+  emotion    TEXT,
+  mi_phase   TEXT,
+  topic      TEXT,
+  relevance  BOOLEAN,
+  axes       JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS reports (
-  id BIGSERIAL PRIMARY KEY,
-  user_id BIGINT REFERENCES user_profile(user_id) ON DELETE CASCADE,
-  kind TEXT,        -- summary | user_snapshot
-  content JSONB,
-  created_at TIMESTAMP DEFAULT NOW()
+-- === DAILY TOPICS (не обязательно в коде, но пригодится) ===
+CREATE TABLE IF NOT EXISTS daily_topics (
+  user_id    BIGINT NOT NULL REFERENCES user_profile(user_id) ON DELETE CASCADE,
+  dt         DATE   NOT NULL DEFAULT CURRENT_DATE,
+  topics     JSONB  NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (user_id, dt)
 );
 
--- ===== Индексы =====
-CREATE INDEX IF NOT EXISTS idx_dialog_user_created ON dialog_events(user_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_dialog_role  ON dialog_events(role);
-CREATE INDEX IF NOT EXISTS idx_dialog_phase ON dialog_events(mi_phase);
-CREATE INDEX IF NOT EXISTS idx_dialog_emotion ON dialog_events(emotion);
-CREATE INDEX IF NOT EXISTS idx_psycho_conf ON psycho_profile(confidence DESC);
+-- === TECH: идемпотентность апдейтов ===
+CREATE TABLE IF NOT EXISTS processed_updates(
+  update_id  BIGINT PRIMARY KEY,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
--- ===== Вьюхи =====
+-- ===== ИНДЕКСЫ =====
+CREATE INDEX IF NOT EXISTS idx_dialog_user_created ON dialog_events(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_dialog_role         ON dialog_events(role);
+CREATE INDEX IF NOT EXISTS idx_dialog_phase        ON dialog_events(mi_phase);
+CREATE INDEX IF NOT EXISTS idx_dialog_emotion      ON dialog_events(emotion);
+CREATE INDEX IF NOT EXISTS idx_psycho_conf         ON psycho_profile(confidence DESC);
+
+-- ===== ВЬЮХИ ДЛЯ ОТЧЁТОВ =====
 DROP VIEW IF EXISTS v_message_lengths;
 CREATE VIEW v_message_lengths AS
 SELECT id, user_id, role, length(coalesce(text,'')) AS len, created_at
