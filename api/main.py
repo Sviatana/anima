@@ -307,50 +307,39 @@ def wants_examples_or_plan(t:str)->bool:
 def is_unknown(t:str)->bool:
     return bool(re.search(r"не знаю|непонят|сложно сказать|затрудняюсь", (t or "").lower()))
 
-# -------------- API --------------
-WELCOME = (
-    "Привет 🌿 Я Анима — твой личный психологический ассистент. "
-    "Помогаю навести ясность, снизить стресс и наметить шаги вперёд. "
-    "Наши разговоры конфиденциальны, никакого спама — только поддержка 💛\n\n"
-    "Чтобы быть полезнее, начнём с короткой анкеты (6 вопросов). Отвечай цифрой 1 или 2, можно своими словами.\n\n"
-)
+# ---- старт / приветствие / анкета ----
+st = app_state_get(uid)
 
-@app.get("/")
-async def root():
-    return {"ok":True,"service":"anima"}
+# 1️⃣ первое знакомство
+if text.lower() in ("/start", "старт", "начать") and not st.get("intro_sent"):
+    welcome = (
+        "Привет 🌿\n"
+        "Я — Анима, твой психологический ассистент. Помогаю навести ясность, "
+        "снизить стресс и найти опору.\n\n"
+        "Все наши разговоры — конфиденциальны 💛\n\n"
+        "Чтобы быть полезнее, я предложу короткую анкету — 6 лёгких вопросов.\n"
+        "Готов(-а) начать?"
+    )
+    await tg_send(chat_id, welcome)
+    app_state_patch(uid, {"intro_sent": True})
+    set_last_prompt(uid, welcome)
+    q("INSERT INTO dialog_events(user_id,role,text,mi_phase) VALUES(%s,'assistant',%s,'engage')", (uid, welcome))
+    return {"ok": True}
 
-@app.get("/healthz")
-async def healthz():
-    return {"ok":True}
-
-def allow_reports(x_token:str)->bool:
-    return (REPORTS_TOKEN == "" or REPORTS_TOKEN == x_token)
-
-@app.get("/reports/summary")
-async def reports_summary(x_token: str = Header(default="")):
-    if not allow_reports(x_token):
-        return {"error": "unauthorized"}
-    kpi = q("""
-      WITH ql AS (
-        SELECT avg_quality, safety_rate, answers_total
-        FROM v_quality_score
-        ORDER BY day DESC LIMIT 30
-      ),
-      ph AS (
-        SELECT mi_phase, sum(cnt) AS cnt
-        FROM v_phase_dist
-        WHERE day >= NOW() - INTERVAL '30 days'
-        GROUP BY mi_phase
-      )
-      SELECT
-        (SELECT avg(avg_quality) FROM ql) AS avg_quality_30d,
-        (SELECT avg(safety_rate) FROM ql) AS safety_rate_30d,
-        (SELECT sum(answers_total) FROM ql) AS answers_30d,
-        (SELECT json_agg(json_build_object('phase', mi_phase, 'count', cnt)) FROM ph) AS phases
-    """)
-    conf = q("SELECT * FROM v_confidence_hist")
-    ret  = q("SELECT * FROM v_retention_7d")
-    return {"kpi": kpi[0] if kpi else {}, "confidence_hist": conf or [], "retention7d": ret[0] if ret else {}}
+# 2️⃣ пользователь согласился начать после приветствия
+if st.get("intro_sent") and not st.get("kno_done") and not st.get("kno_idx"):
+    if text.lower() in {"да", "давай", "ок", "начинай", "начнем", "поехали"}:
+        kno_start(uid)
+        first = KNO[0][1] + "\n\nОтветь 1 или 2, можно своими словами."
+        await tg_send(chat_id, first)
+        set_last_prompt(uid, first)
+        q("INSERT INTO dialog_events(user_id,role,text,mi_phase) VALUES(%s,'assistant',%s,'engage')", (uid, first))
+        return {"ok": True}
+    else:
+        reply = "Хочу убедиться, что ты готов(-а) 💛 Напиши «да» или «поехали», чтобы начать анкету."
+        await tg_send(chat_id, reply)
+        set_last_prompt(uid, reply)
+        return {"ok": True}
 
 # вспомогательная отправка с защитой от повторов одного и того же промпта подряд
 def set_last_prompt(uid:int, text:str):
