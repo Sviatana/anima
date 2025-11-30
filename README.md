@@ -37,6 +37,7 @@ This repository demonstrates production-level project structure, environment con
 
 ## 📁 Project Structure
 
+```text
 anima/
 │
 ├── api/                     # FastAPI application: routers, services, dependencies
@@ -55,16 +56,7 @@ anima/
 ├── Procfile                 # Process definition for deploy
 ├── railway.json             # Railway infrastructure config
 └── README.md                # Project documentation
-
-The codebase is structured to allow separation between:
-- business logic  
-- API routes  
-- database  
-- third-party integrations  
-
-This keeps the service maintainable and scalable as features grow.
-
----
+```
 
 ## 🚀 Deployment
 
