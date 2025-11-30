@@ -39,26 +39,22 @@ This repository demonstrates production-level project structure, environment con
 
 anima/
 │
-├── api/ # FastAPI application: routers, services, dependencies
-│ ├── main.py
-│ ├── routes/
-│ └── core/
+├── api/                     # FastAPI application: routers, services, dependencies
+│   ├── main.py
+│   ├── routes/
+│   └── core/
 │
-├── db/ # Database initialization, schema, SQL migrations
-│ ├── schema.sql
-│ ├── connection.py
-│ └── migrations/
+├── db/                      # Database initialization, schema, migrations
+│   ├── schema.sql
+│   ├── connection.py
+│   └── migrations/
 │
-├── .github/workflows/ # CI/CD automation (nightly jobs, formatting, tests)
-│
-├── .env.example # Environment template (safe for public use)
-├── requirements.txt # Python dependencies
-├── Procfile # Process definition for Railway/Heroku-like deploys
-├── railway.json # Railway infrastructure configuration
-└── README.md # Documentation
-
-yaml
-Копировать код
+├── .github/workflows/       # CI/CD automation (nightly jobs, tests, formatting)
+├── .env.example             # Environment template (safe for public use)
+├── requirements.txt         # Python dependencies
+├── Procfile                 # Process definition for deploy
+├── railway.json             # Railway infrastructure config
+└── README.md                # Project documentation
 
 The codebase is structured to allow separation between:
 - business logic  
