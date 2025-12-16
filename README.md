@@ -1,116 +1,50 @@
-# Anima — AI-Powered Backend Service
+# Anima
 
-**Anima** is a modular backend service designed for building AI-driven features, automation workflows, and API integrations.  
-The project follows a clean architecture approach, includes asynchronous backend components, a relational database, and tools for deployment and CI/CD.
+**Anima** — backend-проект на Python, который я использую как базу для сервисов с API, автоматизаций и AI-интеграций.  
+Репозиторий показывает, как я организую backend-архитектуру, работу с БД, окружением, деплоем и CI/CD.
 
-This repository demonstrates production-level project structure, environment configuration, and backend engineering practices using modern Python.
+Проект не привязан к конкретному бизнес-кейсу и задуман как расширяемая основа для дальнейшего развития.
 
 ---
 
-## ⚙️ Tech Stack
+## Стек
 
-**Languages & Runtime**
-- Python 3.x  
+**Backend**
+- Python 3
+- FastAPI
 - AsyncIO
 
-**Backend Framework**
-- FastAPI
+**База данных**
+- PostgreSQL
+- SQLAlchemy (ORM / Core)
+- SQL-схема и миграции
 
-**Database Layer**
-- PostgreSQL  
-- SQLAlchemy (Core/ORM)  
-- Alembic-style schema structure  
-
-**Infrastructure & DevOps**
-- Docker  
-- Railway (deployment)  
-- Procfile  
-- `railway.json` service config  
-- GitHub Actions (nightly workflows)
-
-**Testing & Tools**
-- Modular API structure  
-- Environment templating via `.env.example`  
-- Structured project layout for future scaling
+**Инфраструктура**
+- Docker
+- Railway (конфигурация для деплоя)
+- Procfile
+- GitHub Actions (CI)
 
 ---
 
-## 📁 Project Structure
+## Структура проекта
 
 ```text
 anima/
 │
-├── api/                     # FastAPI application: routers, services, dependencies
-│   ├── main.py
-│   ├── routes/
-│   └── core/
+├── api/                     # FastAPI приложение
+│   ├── main.py              # Точка входа
+│   ├── routes/              # API роуты
+│   └── core/                # зависимости, настройки
 │
-├── db/                      # Database initialization, schema, migrations
-│   ├── schema.sql
+├── db/                      # Работа с базой данных
 │   ├── connection.py
+│   ├── schema.sql
 │   └── migrations/
 │
-├── .github/workflows/       # CI/CD automation (nightly jobs, tests, formatting)
-├── .env.example             # Environment template (safe for public use)
-├── requirements.txt         # Python dependencies
-├── Procfile                 # Process definition for deploy
-├── railway.json             # Railway infrastructure config
-└── README.md                # Project documentation
-```
-
-## 🚀 Deployment
-
-The project is configured for cloud deployment.
-
-**Supported environments**
-- Railway (native configs included)
-- Docker-based hosting  
-- Local development (`uvicorn`)
-
-Typical run command:
-
-```bash
-uvicorn api.main:app --reload
-Environment variables are managed via .env files:
-
-ini
-Копировать код
-DATABASE_URL=postgresql://user:password@host/dbname
-API_KEY=your_key
-🧩 Key Features
-Fully asynchronous FastAPI backend
-
-Clean architecture & modular separation
-
-SQL-schema versioning and migrations
-
-Secure environment management
-
-Cloud deployment support
-
-Automated workflows via GitHub Actions
-
-Ready for AI, automation, and integrations
-
-🔧 How to Run Locally
-bash
-Копировать код
-# Install dependencies
-pip install -r requirements.txt
-
-# Set up environment
-cp .env.example .env
-
-# Apply database schema
-psql < db/schema.sql
-
-# Run the server
-uvicorn api.main:app --reload
-📌 Status
-This repository is intended as a general-purpose backend base with modular structure.
-New features and AI/automation modules can be added to api/ or integrated via separate services.
-
-🧑‍💻 Author
-Sviatana Sidarenka
-AI Developer · Python Backend Engineer
-https://ai24solutions.ru
+├── .github/workflows/       # CI (проверки, задачи)
+├── .env.example             # Пример переменных окружения
+├── requirements.txt
+├── Procfile
+├── railway.json
+└── README.md
