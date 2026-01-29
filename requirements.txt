@@ -4,3 +4,4 @@ python-dotenv==1.0.1
 httpx==0.27.2
 pydantic==2.8.2
 psycopg2-binary==2.9.9
+asyncpg>=0.29.0
