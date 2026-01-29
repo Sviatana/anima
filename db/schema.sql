@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS dialog_events (
 -- DAILY TOPICS (optional)
 -- =========================
 CREATE TABLE IF NOT EXISTS daily_topics (
-  user_id    BIGINT NOT NULL REFERENCES Canadianu_profile(user_id) ON DELETE CASCADE,
+  user_id    BIGINT NOT NULL REFERENCES user_profile(user_id) ON DELETE CASCADE,
   dt         DATE   NOT NULL DEFAULT CURRENT_DATE,
   topics     JSONB  NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
