@@ -1,103 +1,132 @@
 # Anima
 
-**Anima** — backend-проект на Python, используемый как основа для сервисов с API, автоматизациями и интеграциями.  
-Репозиторий демонстрирует организацию backend-архитектуры, работу с базой данных, окружением, деплоем и CI/CD.
+**Anima** is a production-style backend project built with **FastAPI**.  
+It is designed as a reusable foundation for **API-driven services, AI assistants, and voice-enabled systems**.
 
-Проект не привязан к конкретному бизнес-кейсу и задуман как расширяемая база для дальнейшего развития.
+The repository demonstrates backend architecture, asynchronous request handling, database integration, environment-based configuration, CI, and deployment-ready setup.
 
 ---
 
-## Стек
+## Overview
+
+Anima is not tied to a specific business domain.  
+It serves as a **clean backend template** that can be extended for real production services, including systems that orchestrate AI models, voice pipelines (STT / TTS), and external APIs.
+
+---
+
+## What This Repository Demonstrates
+
+- Clean backend architecture with FastAPI  
+- Clear separation of concerns (API / core logic / database)  
+- Asynchronous request handling  
+- PostgreSQL integration with explicit SQL schema  
+- Environment-based configuration  
+- CI pipeline with GitHub Actions  
+- Deployment-ready setup (Docker, Railway, Procfile)  
+
+---
+
+## Tech Stack
 
 ### Backend
-- Python 3
-- FastAPI
-- AsyncIO
+- Python 3  
+- FastAPI  
+- AsyncIO  
 
-### База данных
-- PostgreSQL
-- SQLAlchemy (ORM / Core)
-- SQL-схема и миграции
+### Database
+- PostgreSQL  
+- SQLAlchemy (ORM / Core)  
+- Explicit SQL schema and migrations  
 
-### Инфраструктура
-- Docker
-- Railway (конфигурация для деплоя)
-- Procfile
-- GitHub Actions (CI)
+### Infrastructure
+- Docker  
+- Railway (deployment configuration included)  
+- Procfile  
+- GitHub Actions (CI)  
 
 ---
 
-## Структура проекта
+## Project Structure
 
 ```text
 anima/
 │
-├── api/                     # FastAPI приложение
-│   ├── main.py              # Точка входа
-│   ├── routes/              # API роуты
-│   └── core/                # зависимости, настройки
+├── api/                     # FastAPI application
+│   ├── main.py              # Application entry point
+│   ├── routes/              # API routes
+│   └── core/                # Configuration, dependencies
 │
-├── db/                      # Работа с базой данных
+├── db/                      # Database layer
 │   ├── connection.py
 │   ├── schema.sql
 │   └── migrations/
 │
-├── .github/workflows/       # CI (проверки, задачи)
-├── .env.example             # Пример переменных окружения
+├── .github/workflows/       # CI configuration
+├── .env.example             # Environment variables example
 ├── requirements.txt
 ├── Procfile
 ├── railway.json
 └── README.md
+````
 
-Основные возможности
+---
 
-Асинхронный backend на FastAPI
+## Key Features
 
-Четкое разделение слоев (API / core / DB)
+* Asynchronous FastAPI backend
+* Modular and extensible architecture
+* PostgreSQL database integration
+* Configuration via environment variables
+* Ready for cloud deployment
+* CI setup for automated checks
+* Suitable as a base for AI assistants and voice-enabled services
 
-Работа с PostgreSQL
+---
 
-Конфигурация через переменные окружения
+## Local Setup
 
-Готовность к облачному деплою
-
-CI через GitHub Actions
-
-Основа для подключения дополнительных модулей и внешних API
-
-Запуск локально
-# Установка зависимостей
+```bash
+# Install dependencies
 pip install -r requirements.txt
 
-# Подготовка окружения
+# Prepare environment
 cp .env.example .env
 
-# Применение схемы БД
+# Apply database schema
 psql < db/schema.sql
 
-# Запуск сервера
+# Run the server
 uvicorn api.main:app --reload
+```
 
-Деплой
+---
 
-Проект подготовлен для деплоя:
+## Deployment
 
-на Railway (конфигурация включена)
+The project is prepared for deployment:
 
-в Docker-окружении
+* on **Railway** (configuration included)
+* in **Docker-based environments**
+* on any hosting platform supporting Python and ASGI
 
-на любом хостинге с поддержкой Python
+---
 
-Назначение репозитория
+## Purpose of This Repository
 
-Этот репозиторий используется как:
+This repository serves as:
 
-пример production-стиля кода и структуры
+* a public example of **production-style backend architecture**
+* a reusable base for API services and AI assistants
+* a demonstration of my approach to backend system design and structure
 
-Автор
+Most real-world projects built on top of this template are private or under NDA.
 
-Svetlana Sidorenko
+---
+
+## Author
+
+**Svetlana Sidorenko**
 Python Backend Engineer
 
-Website: https://ai24solutions.ru
-LinkedIn: https://www.linkedin.com/in/sviatanasidarenka/
+* Website: [https://ai24solutions.ru](https://ai24solutions.ru)
+* LinkedIn: [https://www.linkedin.com/in/sviatanasidarenka/](https://www.linkedin.com/in/sviatanasidarenka/)
