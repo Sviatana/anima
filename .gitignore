@@ -1,6 +1,52 @@
+# --- env / secrets ---
 .env
-__pycache__/
-*.pyc
-.venv/
 .env.*
+!.env.example
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+.eggs/
+build/
+dist/
+pip-wheel-metadata/
+.wheels/
+
+# --- virtualenv ---
+.venv/
+venv/
+ENV/
+env/
+
+# --- caches / tooling ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+.coverage
+htmlcov/
+coverage.xml
+pytest.xml
+
+# --- logs ---
+*.log
+logs/
+
+# --- IDEs ---
+.vscode/
+.idea/
+*.iml
+
+# --- OS ---
 .DS_Store
+Thumbs.db
+
+# --- local DB / data  ---
+*.sqlite3
+*.db
+
+# --- Jupyter ---
+.ipynb_checkpoints/
