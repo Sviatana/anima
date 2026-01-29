@@ -8,41 +8,76 @@ on:
 jobs:
   ping:
     runs-on: ubuntu-latest
+
     env:
-      PROJECT_URL: "https://web-production-b9ae.up.railway.app"   # ← замени <project>
+      PROJECT_URL: ${{ secrets.PROJECT_URL }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHAT_ID: "<743050845>"            # ← твой ID
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       REPORTS_TOKEN: ${{ secrets.REPORTS_TOKEN }}
+
     steps:
+      - name: Validate secrets
+        run: |
+          set -e
+          test -n "${PROJECT_URL}" || (echo "Missing secret: PROJECT_URL" && exit 1)
+          test -n "${TELEGRAM_BOT_TOKEN}" || (echo "Missing secret: TELEGRAM_BOT_TOKEN" && exit 1)
+          test -n "${TELEGRAM_CHAT_ID}" || (echo "Missing secret: TELEGRAM_CHAT_ID" && exit 1)
+
       - name: Check health
         id: health
         run: |
           set -e
-          code=$(curl -s -o /dev/null -w "%{http_code}" "$PROJECT_URL/healthz")
-          echo "code=$code" >> $GITHUB_OUTPUT
+          code=$(curl -s -o /dev/null -w "%{http_code}" "${PROJECT_URL}/healthz" || echo "000")
+          echo "code=${code}" >> "${GITHUB_OUTPUT}"
 
-      - name: Send OK
+      - name: Notify OK
         if: steps.health.outputs.code == '200'
         run: |
-          msg="✅ Nightly: $PROJECT_URL жив (200)."
+          set -e
+          msg="✅ Nightly: ${PROJECT_URL} is alive (200)."
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -H 'Content-Type: application/json' \
-            -d "{\"chat_id\": \"${TELEGRAM_CHAT_ID}\", \"text\": \"${msg}\"}" > /dev/null
+            -d "{\"chat_id\":\"${TELEGRAM_CHAT_ID}\",\"text\":\"${msg}\"}" > /dev/null
 
-      - name: Send ALERT
+      - name: Notify ALERT
         if: steps.health.outputs.code != '200'
         run: |
-          msg="❌ Nightly: $PROJECT_URL недоступен (code=${{ steps.health.outputs.code }})."
+          set -e
+          msg="❌ Nightly: ${PROJECT_URL} is down (code=${{ steps.health.outputs.code }})."
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -H 'Content-Type: application/json' \
-            -d "{\"chat_id\": \"${TELEGRAM_CHAT_ID}\", \"text\": \"${msg}\"}" > /dev/null
+            -d "{\"chat_id\":\"${TELEGRAM_CHAT_ID}\",\"text\":\"${msg}\"}" > /dev/null
 
-      - name: Optional summary
-        if: env.REPORTS_TOKEN != ''
+      - name: Fetch KPI summary (optional)
+        if: steps.health.outputs.code == '200' && env.REPORTS_TOKEN != ''
+        id: summary
         run: |
-          curl -s -H "x-token: ${REPORTS_TOKEN}" "$PROJECT_URL/reports/summary" \
-            | jq -r '["📊 Nightly KPI", "avg_quality_30d: \(.kpi.avg_quality_30d // "n/a")", "safety_rate_30d: \(.kpi.safety_rate_30d // "n/a")", "answers_30d: \(.kpi.answers_30d // "n/a")"] | join("\n")' \
-            | xargs -0 -I {} bash -c \
-              'curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-               -H "Content-Type: application/json" \
-               -d "{\"chat_id\":\"${TELEGRAM_CHAT_ID}\",\"text\":\"{}\"}" > /dev/null' || true
+          set -e
+          body=$(curl -s -H "x-token: ${REPORTS_TOKEN}" "${PROJECT_URL}/reports/summary" || true)
+          if [ -z "$body" ]; then
+            echo "text=📊 Nightly KPI\n(no data)" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          # very small JSON parsing without jq (best-effort)
+          v1=$(echo "$body" | sed -n 's/.*"avg_quality_30d"[[:space:]]*:[[:space:]]*\([^,}]*\).*/\1/p' | head -n 1 | tr -d '"')
+          v2=$(echo "$body" | sed -n 's/.*"safety_rate_30d"[[:space:]]*:[[:space:]]*\([^,}]*\).*/\1/p' | head -n 1 | tr -d '"')
+          v3=$(echo "$body" | sed -n 's/.*"answers_30d"[[:space:]]*:[[:space:]]*\([^,}]*\).*/\1/p' | head -n 1 | tr -d '"')
+
+          [ -n "$v1" ] || v1="n/a"
+          [ -n "$v2" ] || v2="n/a"
+          [ -n "$v3" ] || v3="n/a"
+
+          text=$(printf "📊 Nightly KPI\navg_quality_30d: %s\nsafety_rate_30d: %s\nanswers_30d: %s" "$v1" "$v2" "$v3")
+          echo "text<<EOF" >> "${GITHUB_OUTPUT}"
+          echo "$text" >> "${GITHUB_OUTPUT}"
+          echo "EOF" >> "${GITHUB_OUTPUT}"
+
+      - name: Send KPI summary (optional)
+        if: steps.health.outputs.code == '200' && env.REPORTS_TOKEN != ''
+        run: |
+          set -e
+          msg="${{ steps.summary.outputs.text }}"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -H 'Content-Type: application/json' \
+            -d "{\"chat_id\":\"${TELEGRAM_CHAT_ID}\",\"text\":\"${msg}\"}" > /dev/null
